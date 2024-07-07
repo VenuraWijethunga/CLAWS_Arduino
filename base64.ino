@@ -1,5 +1,7 @@
 #include "esp_camera.h"
 #include "base64.h"
+#include <WiFi.h>
+#include <HTTPClient.h>
 
 #define PWDN_GPIO_NUM     32
 #define RESET_GPIO_NUM    -1
@@ -19,12 +21,34 @@
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
 
+#define FLASH_GPIO_NUM     4
+
+const char* ssid = "Venura";
+const char* password = "12345678";
+const char* serverName = "https://0e343f79-2075-47d9-a6f8-eb71a020257a.mock.pstmn.io/success"; // Replace with your endpoint URL
+
 camera_fb_t *fb = NULL;
 String base64String = "";
 unsigned long startTime = 0;
 
 void setup() {
   Serial.begin(115200);
+  
+  // Initialize the flash GPIO pin
+  pinMode(FLASH_GPIO_NUM, OUTPUT);
+  digitalWrite(FLASH_GPIO_NUM, LOW); // Turn off the flash initially
+
+  // Connect to WiFi
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected.");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+
   // Configure camera settings
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -58,45 +82,69 @@ void setup() {
     return;
   }
 
+  // Turn on the flash
+  digitalWrite(FLASH_GPIO_NUM, HIGH);
+  delay(100); // Short delay to ensure flash is on before capturing
+
   // Capture a picture
   fb = esp_camera_fb_get();
   if (!fb) {
     Serial.println("Camera capture failed");
+    digitalWrite(FLASH_GPIO_NUM, LOW); // Turn off the flash if capture fails
     return;
   }
+
+  // Turn off the flash
+  digitalWrite(FLASH_GPIO_NUM, LOW);
 
   // Encode the image to Base64
   base64String = base64::encode((uint8_t *)fb->buf, fb->len);
   Serial.println("Base64 Encoded Image:");
   Serial.println(base64String);
 
+  // Send the Base64 encoded image as JSON to the endpoint
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+    http.begin(serverName);
+    http.addHeader("Content-Type", "application/json");
+
+    String jsonPayload = "{\"image\":\"" + base64String + "\"}";
+    int httpResponseCode = http.POST(jsonPayload);
+
+    if (httpResponseCode > 0) {
+      String response = http.getString();
+      Serial.println(httpResponseCode);
+      Serial.println(response);
+    } else {
+      Serial.print("Error on sending POST: ");
+      Serial.println(httpResponseCode);
+      Serial.print("HTTP error: ");
+      Serial.println(http.errorToString(httpResponseCode));
+    }
+
+    http.end();
+  } else {
+    Serial.println("WiFi Disconnected");
+  }
+
   // Start timer
   startTime = millis();
 }
 
 void loop() {
-  // Check if 1 minute has passed
-  if (millis() - startTime >= 60000) {
+  // Check if 30 seconds have passed
+  if (millis() - startTime >= 30000 && base64String != "") {
     // Delete the image and Base64 string
     if (fb) {
       esp_camera_fb_return(fb);
       fb = NULL;
     }
     base64String = "";
-    Serial.println("Image and Base64 string deleted after 1 minute");
+    Serial.println("Image and Base64 string deleted after 30 seconds");
 
-    // Optional: Capture a new picture and restart the process
-    // Uncomment the following lines if you want to capture a new image every minute
-    /*
-    fb = esp_camera_fb_get();
-    if (!fb) {
-      Serial.println("Camera capture failed");
-      return;
+    // Stop further execution
+    while (true) {
+      // Do nothing, effectively halting the program
     }
-    base64String = base64::encode((uint8_t *)fb->buf, fb->len);
-    Serial.println("Base64 Encoded Image:");
-    Serial.println(base64String);
-    startTime = millis();
-    */
   }
 }
