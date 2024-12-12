@@ -63,8 +63,8 @@ void setup() {
     Serial.println("Audio volume set to 5.");
     
     // Open music file
-    Serial.println("Attempting to play /MYMUSIC.mp3 from microSD card...");
-    audio.connecttoFS(SD, "/MYMUSIC.mp3");
+    Serial.println("Attempting to play /ELEPHANT.mp3 from microSD card...");
+    audio.connecttoFS(SD, "/ELEPHANT.mp3");
 }
  
 void loop() {

@@ -12,14 +12,14 @@
 #include "addons/RTDBHelper.h"
 
 // Insert your network credentials
-#define WIFI_SSID "Venura"
-#define WIFI_PASSWORD "12345678"
+#define WIFI_SSID "WENURA"
+#define WIFI_PASSWORD "wijethunga1953"
 
 // Insert Firebase project API Key
-#define API_KEY "AIzaSyB-LLg5PNlmCXmySOW90O5tcs1uDttea24"
+#define API_KEY "AIzaSyAs46g6wEzzDoEB0pr0BL0H4VwaDc5cesw"
 
 // Insert RTDB URL
-#define DATABASE_URL "https://claws-423416-default-rtdb.asia-southeast1.firebasedatabase.app/"
+#define DATABASE_URL "https://claws-iot-6e846-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
 // Define Firebase Data object
 FirebaseData fbdo;

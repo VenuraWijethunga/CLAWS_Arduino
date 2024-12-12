@@ -25,9 +25,9 @@
 #define FLASH_GPIO_NUM     4
 #define PIR_SENSOR_PIN    13
 
-const char* ssid = "Venura";
-const char* password = "12345678";
-const char* serverName = "https://asia-south1-claws-423416.cloudfunctions.net/receive_images"; // Replace with your endpoint URL
+const char* ssid = "WENURA";
+const char* password = "wijethunga1953";
+const char* serverName = "https://asia-south1-claws-441617.cloudfunctions.net/classify_captured_animals"; // Replace with your endpoint URL
 
 camera_fb_t *fb = NULL;
 String base64String = "";

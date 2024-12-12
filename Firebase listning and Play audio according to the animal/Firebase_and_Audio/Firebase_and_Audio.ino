@@ -16,8 +16,8 @@
 #define WIFI_PASSWORD "wijethunga1953"
 
 // Firebase credentials
-#define API_KEY "AIzaSyB-LLg5PNlmCXmySOW90O5tcs1uDttea24"
-#define DATABASE_URL "https://claws-423416-default-rtdb.asia-southeast1.firebasedatabase.app/"
+#define API_KEY "AIzaSyAs46g6wEzzDoEB0pr0BL0H4VwaDc5cesw"
+#define DATABASE_URL "https://claws-iot-6e846-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
 // SD Card and I2S pin configurations
 #define SD_CS 5
@@ -70,10 +70,36 @@ void streamTimeoutCallback(bool timeout) {
   }
 }
 
+// Initialize SD card with retry mechanism
+void initializeSDCard() {
+  const int maxRetries = 5;  // Maximum number of retries
+  int retryCount = 0;
+
+  pinMode(SD_CS, OUTPUT);
+  digitalWrite(SD_CS, HIGH);
+  SPI.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
+
+  while (!SD.begin(SD_CS) && retryCount < maxRetries) {
+    retryCount++;
+    Serial.printf("SD card initialization failed. Retry %d of %d\n", retryCount, maxRetries);
+    delay(1000);  // Wait before retrying
+  }
+
+  if (retryCount >= maxRetries) {
+    Serial.println("SD card initialization failed after maximum retries. Halting.");
+    while (true) {
+      // Optionally blink an LED or provide another visual indicator
+      delay(1000);
+    }
+  }
+
+  Serial.println("SD card initialized successfully.");
+}
+
 void setup() {
   // Initialize Serial
   Serial.begin(115200);
-  
+
   // Initialize WiFi
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Connecting to Wi-Fi");
@@ -90,7 +116,7 @@ void setup() {
   config.api_key = API_KEY;
   config.database_url = DATABASE_URL;
   config.token_status_callback = tokenStatusCallback;  // Handle token generation
-  
+
   // Start Firebase
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
@@ -109,14 +135,7 @@ void setup() {
   Firebase.RTDB.setStreamCallback(&stream, streamCallback, streamTimeoutCallback);
 
   // Initialize SD card
-  pinMode(SD_CS, OUTPUT);
-  digitalWrite(SD_CS, HIGH);
-  SPI.begin(SPI_SCK, SPI_MISO, SPI_MOSI);
-
-  if (!SD.begin(SD_CS)) {
-    Serial.println("SD card initialization failed.");
-    while (true);
-  }
+  initializeSDCard();
 
   // Initialize I2S for audio
   audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
