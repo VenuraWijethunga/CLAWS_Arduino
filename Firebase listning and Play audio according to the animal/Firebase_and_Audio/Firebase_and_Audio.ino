@@ -16,8 +16,8 @@
 #define WIFI_PASSWORD "wijethunga1953"
 
 // Firebase credentials
-#define API_KEY "AIzaSyAs46g6wEzzDoEB0pr0BL0H4VwaDc5cesw"
-#define DATABASE_URL "https://claws-iot-6e846-default-rtdb.asia-southeast1.firebasedatabase.app/"
+#define API_KEY "AIzaSyBKBp7ZU6qyemAcp2pAw6WSB5QpOViMUt4"
+#define DATABASE_URL "https://claws-441617-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
 // SD Card and I2S pin configurations
 #define SD_CS 5
