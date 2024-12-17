@@ -29,14 +29,15 @@
 #define I2S_LRC 26
 
 // Firebase objects
-FirebaseData fbdo;
-FirebaseData stream;
+FirebaseData fbdo;             // General Firebase object
+FirebaseData stream1;          // Stream for first path (animalName)
+FirebaseData stream2;          // Stream for second path (Action)
+FirebaseData stream3;          // Stream for third path (ChangedAnimal)
 FirebaseAuth auth;
 FirebaseConfig config;
 
 bool signupOK = false;
-
-// Audio object
+bool actionState = false;  // Track whether action == 1 or 0
 Audio audio;
 
 // Function to play music based on the animal name
@@ -47,73 +48,89 @@ void playAnimalSound(String animalName) {
     audio.connecttoFS(SD, "/WILDBOAR.mp3");
   } else if (animalName == "peacock") {
     audio.connecttoFS(SD, "/PEACOCK.mp3");
-  } else {
+  } else if (animalName == "common") {
+    audio.connecttoFS(SD, "/COMMON.mp3");
+  }else {
     Serial.println("Unknown animal name, no music played.");
   }
 }
 
-// Callback function to handle Firebase updates for RequestUpdate and Response
-void streamCallback(FirebaseStream data) {
-  // Handle Action from RequestUpdate
-  if (data.dataPath() == "/RequestUpdate/Action" && data.dataTypeEnum() == fb_esp_rtdb_data_type_integer) {
-    int action = data.intData();
-    Serial.printf("Action received: %d\n", action);
-
-    if (action == 1) {
-      // Action 1: Check the animal name and play music
-      if (Firebase.RTDB.getString(&fbdo, "/RequestUpdate/animalUpdate/ChangeAnimal")) {
-        String animalName = fbdo.stringData();
-        Serial.printf("Animal to play: %s\n", animalName.c_str());
-        playAnimalSound(animalName);  // Play corresponding sound
-      } else {
-        Serial.printf("Failed to get ChangeAnimal: %s\n", fbdo.errorReason().c_str());
-      }
-    }
-    else if (action == 0) {
-      // Action 0: Stop music if playing
-      audio.stopSong();
-      Serial.println("Music stopped.");
-    }
-  }
-  
-  // Handle ChangeAnimal from RequestUpdate (If needed)
-  else if (data.dataPath() == "/RequestUpdate/animalUpdate/ChangeAnimal" && data.dataTypeEnum() == fb_esp_rtdb_data_type_string) {
+// Callback function for the first path: animalName (Response)
+void streamCallback1(FirebaseStream data) {
+  if (data.dataTypeEnum() == fb_esp_rtdb_data_type_string) {
     String animalName = data.stringData();
-    Serial.printf("ChangeAnimal received: %s\n", animalName.c_str());
-
-    // If Action is 1, play the animal sound
-    if (Firebase.RTDB.getInt(&fbdo, "/RequestUpdate/Action")) {
-      int action = fbdo.intData();
-      if (action == 1) {
-        playAnimalSound(animalName);  // Play corresponding sound
-      } else {
-        Serial.println("Action is not 1, no music played.");
-      }
-    } else {
-      Serial.printf("Failed to read Action: %s\n", fbdo.errorReason().c_str());
+    Serial.printf("Animal Name Updated: %s\n", animalName.c_str());
+    if (actionState) {  // Play sound only if action == 1
+      playAnimalSound(animalName);
     }
-  }
-
-  // Handle the response part updates (this part is already fine based on your previous logic)
-  if (data.dataPath() == "/response/detectedAnimalName/animalName" && data.dataTypeEnum() == fb_esp_rtdb_data_type_string) {
-    String animalName = data.stringData();
-    Serial.printf("Response Animal Name: %s\n", animalName.c_str());
-    playAnimalSound(animalName);  // Play corresponding sound
   }
 }
 
-void streamTimeoutCallback(bool timeout) {
+// Callback function for the third path: ChangedAnimal (Request Update)
+void streamCallback3(FirebaseStream data) {
+  if (data.dataTypeEnum() == fb_esp_rtdb_data_type_string) {
+    String changedAnimal = data.stringData();
+    Serial.printf("Changed Animal Updated: %s\n", changedAnimal.c_str());
+    if (actionState) {  // Play sound only if action == 1
+      playAnimalSound(changedAnimal);
+    }
+  }
+}
+
+// Callback function for the second path: Action
+void streamCallback2(FirebaseStream data) {
+  if (data.dataTypeEnum() == fb_esp_rtdb_data_type_string) {
+    String action = data.stringData();
+    Serial.printf("Action Updated: %s\n", action.c_str());
+
+    if (action == "1") {
+      actionState = true;
+      Serial.println("Action is 1. Listening to updates...");
+      
+      // Start streaming both paths when action is 1
+      if (!Firebase.RTDB.beginStream(&stream1, "response/detectedAnimalName/animalName")) {
+        Serial.printf("Stream 1 error: %s\n", stream1.errorReason().c_str());
+      }
+      Firebase.RTDB.setStreamCallback(&stream1, streamCallback1, NULL);
+      
+      if (!Firebase.RTDB.beginStream(&stream3, "RequestUpdate/animalUpdate/ChangedAnimal")) {
+        Serial.printf("Stream 3 error: %s\n", stream3.errorReason().c_str());
+      }
+      Firebase.RTDB.setStreamCallback(&stream3, streamCallback3, NULL);
+    } 
+    else if (action == "0") {
+      actionState = false;
+      Serial.println("Action is 0. Stopping all playback...");
+      audio.stopSong();  // Stop currently playing music
+      // Stop listening to updates
+      Firebase.RTDB.endStream(&stream1);
+      Firebase.RTDB.endStream(&stream3);
+    }
+  }
+}
+
+// Timeout callbacks
+void streamTimeoutCallback1(bool timeout) {
   if (timeout) {
-    Serial.println("Stream timeout, resuming...");
-  }
-  if (!stream.httpConnected()) {
-    Serial.printf("Connection error: %s\n", stream.errorReason().c_str());
+    Serial.println("Stream 1 timeout, resuming...");
   }
 }
 
-// Initialize SD card with retry mechanism
+void streamTimeoutCallback2(bool timeout) {
+  if (timeout) {
+    Serial.println("Stream 2 timeout, resuming...");
+  }
+}
+
+void streamTimeoutCallback3(bool timeout) {
+  if (timeout) {
+    Serial.println("Stream 3 timeout, resuming...");
+  }
+}
+
+// Initialize SD card
 void initializeSDCard() {
-  const int maxRetries = 5;  // Maximum number of retries
+  const int maxRetries = 5;
   int retryCount = 0;
 
   pinMode(SD_CS, OUTPUT);
@@ -123,15 +140,12 @@ void initializeSDCard() {
   while (!SD.begin(SD_CS) && retryCount < maxRetries) {
     retryCount++;
     Serial.printf("SD card initialization failed. Retry %d of %d\n", retryCount, maxRetries);
-    delay(1000);  // Wait before retrying
+    delay(1000);
   }
 
   if (retryCount >= maxRetries) {
-    Serial.println("SD card initialization failed after maximum retries. Halting.");
-    while (true) {
-      // Optionally blink an LED or provide another visual indicator
-      delay(1000);
-    }
+    Serial.println("SD card initialization failed. Halting.");
+    while (true) delay(1000);
   }
 
   Serial.println("SD card initialized successfully.");
@@ -151,41 +165,35 @@ void setup() {
   Serial.println();
   Serial.print("Connected with IP: ");
   Serial.println(WiFi.localIP());
-  Serial.println();
 
   // Firebase configuration
   config.api_key = API_KEY;
   config.database_url = DATABASE_URL;
-  config.token_status_callback = tokenStatusCallback;  // Handle token generation
+  config.token_status_callback = tokenStatusCallback;
 
   // Start Firebase
   Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
-  // Sign up and set up Firebase stream
+  // Sign up
   if (Firebase.signUp(&config, &auth, "", "")) {
     signupOK = true;
   } else {
     Serial.printf("SignUp error: %s\n", config.signer.signupError.message.c_str());
   }
 
-  // Set up Firebase stream to listen to both Action, ChangeAnimal, and Response
-  if (!Firebase.RTDB.beginStream(&stream, "/RequestUpdate/Action") || 
-      !Firebase.RTDB.beginStream(&stream, "/RequestUpdate/animalUpdate/ChangeAnimal") ||
-      !Firebase.RTDB.beginStream(&stream, "/response/detectedAnimalName/animalName")) {
-    Serial.printf("Stream begin error: %s\n", stream.errorReason().c_str());
+  // Start Firebase stream for Action path
+  if (!Firebase.RTDB.beginStream(&stream2, "RequestUpdate/Action")) {
+    Serial.printf("Stream 2 error: %s\n", stream2.errorReason().c_str());
   }
+  Firebase.RTDB.setStreamCallback(&stream2, streamCallback2, streamTimeoutCallback2);
 
-  Firebase.RTDB.setStreamCallback(&stream, streamCallback, streamTimeoutCallback);
-
-  // Initialize SD card
+  // Initialize SD card and I2S
   initializeSDCard();
-
-  // Initialize I2S for audio
   audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
-  audio.setVolume(10);  // Set volume to 10
+  audio.setVolume(10);
 }
 
 void loop() {
-  audio.loop();  // Keep audio playing in loop
+  audio.loop();  // Keep checking for audio playback
 }
